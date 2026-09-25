@@ -2,6 +2,12 @@ import express from "express";
 import cors from "cors";
 import helmet from "helmet";
 import "dotenv/config";
+import fs from "node:fs/promises";
+import path from "node:path";
+
+const carsPath = path.join(import.meta.dirname, "assets", "cars.json");
+const carsJson = await fs.readFile(carsPath, { encoding: "utf-8" });
+const cars = JSON.parse(carsJson);
 
 const app = express();
 const port = process.env.PORT;
@@ -35,6 +41,10 @@ app.get("/products", (req, res) => {
 app.get("/products/:productId", (req, res) => {
   const { productId } = req.params;
   res.status(200).json({ id: productId });
+});
+
+app.get("/cars", (req, res) => {
+  res.status(200).json(cars);
 });
 
 app.get("/get-error", (req, res) => {
