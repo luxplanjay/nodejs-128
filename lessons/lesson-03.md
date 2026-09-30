@@ -57,3 +57,37 @@
 9. Організувати код — розділити на middleware, роутинг, контролери
 10. Підключити `http-errors` — замінити ручні помилки на `createHttpError`
 11. Оновити middleware обробки помилок — отримувати `status` та `message` з помилки
+
+## Структура проєкта
+
+```bash
+
+  server.js
+
+  /routes
+     studentsRoutes.js
+     userRoutes.js
+
+  /controllers
+     studentsController.js
+     userController.js
+
+  /models
+     student.js
+     user.js
+
+
+
+  server.js
+
+  /user
+     user.model.js
+     user.controller.js
+     user.routes.js
+
+  /student
+     student.model.js
+     student.controller.js
+     student.routes.js
+
+```
