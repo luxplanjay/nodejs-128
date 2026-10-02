@@ -1,0 +1,522 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Building Web APIs with Node.js — Students API",
+    "description": "REST API for the `Building Web APIs with Node.js` course (BetterED Neoversity). Express 5 + MongoDB/Mongoose CRUD over a single `students` collection, mounted at the server root (no version prefix).\n\n**This build has no authentication and no request-validation middleware.** Requests are neither authenticated nor authorized, and request bodies are validated only by the Mongoose schema inside the driver, not by `celebrate`/`Joi`. See the per-operation descriptions for the error codes that actually result from this.\n\nUnmatched routes are handled by `notFoundHandler` and return `404 {\"message\": \"Route not found\"}`. Handler errors funnel through `errorHandler`: HTTP errors (`http-errors`) are returned with their own status, everything else becomes `500`. The `500` body is environment-dependent — `error.stack` outside production, `error.message` in production.",
+    "version": "1.0.0",
+    "contact": {
+      "name": "Alexander Repeta",
+      "url": "https://github.com/luxplanjay/nodejs-128",
+      "email": "alexander.repeta@gmail.com"
+    },
+    "license": {
+      "name": "ISC",
+      "url": "https://github.com/luxplanjay/nodejs-128/blob/main/LICENSE"
+    }
+  },
+  "servers": [
+    {
+      "url": "http://localhost:3005",
+      "description": "Local development server (PORT=3005 from .env)"
+    }
+  ],
+  "tags": [
+    {
+      "name": "students",
+      "description": "CRUD operations for the `students` collection. Backed by `src/routes/studentsRoutes.js` and `src/controllers/studentsController.js`."
+    }
+  ],
+  "paths": {
+    "/students": {
+      "get": {
+        "tags": ["students"],
+        "summary": "List students",
+        "description": "Returns every student document in the collection. The handler issues a bare `Student.find()` — no filtering, sorting, field projection or pagination is applied, so the array length equals the full collection size.",
+        "operationId": "getStudents",
+        "responses": {
+          "200": {
+            "description": "All students. Empty array when the collection is empty.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Student"
+                  }
+                },
+                "examples": {
+                  "twoStudents": {
+                    "summary": "Two students",
+                    "value": [
+                      {
+                        "_id": "66f1c2a4b3e5d7a9c0f1e2d3",
+                        "name": "Alice",
+                        "age": 20,
+                        "onDuty": false,
+                        "avgMark": 4.5,
+                        "gender": "female",
+                        "createdAt": "2026-09-30T12:00:00.000Z",
+                        "updatedAt": "2026-09-30T12:00:00.000Z",
+                        "__v": 0
+                      },
+                      {
+                        "_id": "66f1c2a4b3e5d7a9c0f1e2d4",
+                        "name": "Bob",
+                        "age": 22,
+                        "onDuty": true,
+                        "avgMark": 3.2,
+                        "gender": "male",
+                        "createdAt": "2026-09-30T12:05:00.000Z",
+                        "updatedAt": "2026-09-30T12:30:00.000Z",
+                        "__v": 0
+                      }
+                    ]
+                  },
+                  "noStudents": {
+                    "summary": "Empty collection",
+                    "value": []
+                  }
+                }
+              }
+            }
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      },
+      "post": {
+        "tags": ["students"],
+        "summary": "Create student",
+        "description": "Creates a new student from the request body via `Student.create(req.body)` and returns the persisted document.\n\nValidation is performed by the Mongoose schema in `src/models/student.js` (`name`, `age`, `avgMark` and `gender` are `required`; `gender` is restricted to the `male`/`female`/`other` enum; `onDuty` defaults to `false`). There is no `celebrate`/`Joi` middleware in this build.\n\nNote that a body which fails schema validation produces a **500**, not a 400: Mongoose throws a `ValidationError`, which is not an `http-errors` instance, so `errorHandler` treats it as an unexpected error. Unknown properties are silently stripped rather than rejected, because the schema runs in Mongoose `strict` mode.",
+        "operationId": "createStudent",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudentCreate"
+              },
+              "examples": {
+                "minimal": {
+                  "summary": "Required fields only",
+                  "value": {
+                    "name": "Alice",
+                    "age": 20,
+                    "avgMark": 4.5,
+                    "gender": "female"
+                  }
+                },
+                "withDefaults": {
+                  "summary": "Explicitly setting onDuty",
+                  "value": {
+                    "name": "Bob",
+                    "age": 22,
+                    "onDuty": true,
+                    "avgMark": 3.2,
+                    "gender": "male"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "The student was created. `onDuty` is present even when omitted from the request, because the schema defaults it to `false`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Student"
+                },
+                "example": {
+                  "_id": "66f1c2a4b3e5d7a9c0f1e2d3",
+                  "name": "Alice",
+                  "age": 20,
+                  "onDuty": false,
+                  "avgMark": 4.5,
+                  "gender": "female",
+                  "createdAt": "2026-09-30T12:00:00.000Z",
+                  "updatedAt": "2026-09-30T12:00:00.000Z",
+                  "__v": 0
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/students/{studentId}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/StudentId"
+        }
+      ],
+      "get": {
+        "tags": ["students"],
+        "summary": "Get student by id",
+        "description": "Looks up a single student by its MongoDB ObjectId and returns the document, or `404` when no document matches.\n\n`studentId` is taken straight from `req.params` with no validation middleware, so a value that is not a valid 24-character hex ObjectId makes Mongoose throw a `CastError`, which surfaces as a `500`.",
+        "operationId": "getStudentById",
+        "responses": {
+          "200": {
+            "description": "The matching student.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Student"
+                },
+                "example": {
+                  "_id": "66f1c2a4b3e5d7a9c0f1e2d3",
+                  "name": "Alice",
+                  "age": 20,
+                  "onDuty": false,
+                  "avgMark": 4.5,
+                  "gender": "female",
+                  "createdAt": "2026-09-30T12:00:00.000Z",
+                  "updatedAt": "2026-09-30T12:00:00.000Z",
+                  "__v": 0
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/StudentNotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      },
+      "patch": {
+        "tags": ["students"],
+        "summary": "Partially update student",
+        "description": "Applies the request body as an update document through `findOneAndUpdate({ _id: studentId }, req.body, { returnDocument: 'after' })` and returns the updated student, or `404` when no document matches.\n\nTwo behaviours follow from how the handler is written:\n\n- **Validators do not run on this route.** `runValidators` is not enabled, so the schema's `required` flags and the `gender` enum are *not* enforced here (unlike `POST /students`, which goes through `Student.create`). Every field below is therefore optional, and an out-of-enum `gender` will be stored as-is.\n- The body is handed to Mongoose untouched, so query-operator syntax such as `{ \"$set\": { \"name\": \"Alice\" } }` or `{ \"$unset\": { \"avgMark\": 1 } }` is passed through and will also work.",
+        "operationId": "updateStudent",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StudentUpdate"
+              },
+              "examples": {
+                "partialObject": {
+                  "summary": "Partial student object",
+                  "value": {
+                    "age": 21,
+                    "avgMark": 4.9
+                  }
+                },
+                "withOperator": {
+                  "summary": "Mongoose update operator",
+                  "value": {
+                    "$set": {
+                      "onDuty": true
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The student after the update (`returnDocument: 'after'`).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Student"
+                },
+                "example": {
+                  "_id": "66f1c2a4b3e5d7a9c0f1e2d3",
+                  "name": "Alice",
+                  "age": 21,
+                  "onDuty": false,
+                  "avgMark": 4.9,
+                  "gender": "female",
+                  "createdAt": "2026-09-30T12:00:00.000Z",
+                  "updatedAt": "2026-10-02T09:15:00.000Z",
+                  "__v": 0
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/StudentNotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      },
+      "delete": {
+        "tags": ["students"],
+        "summary": "Delete student",
+        "description": "Deletes the student with the given ObjectId and returns the removed document, or `404` when no document matches.\n\nNote the response contract: the handler responds `200` with the deleted student as JSON. The `204 No Content` variant is present in the source as a commented-out line and is not active.",
+        "operationId": "deleteStudent",
+        "responses": {
+          "200": {
+            "description": "The student that was deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Student"
+                },
+                "example": {
+                  "_id": "66f1c2a4b3e5d7a9c0f1e2d4",
+                  "name": "Bob",
+                  "age": 22,
+                  "onDuty": true,
+                  "avgMark": 3.2,
+                  "gender": "male",
+                  "createdAt": "2026-09-30T12:05:00.000Z",
+                  "updatedAt": "2026-09-30T12:30:00.000Z",
+                  "__v": 0
+                }
+              }
+            }
+          },
+          "404": {
+            "$ref": "#/components/responses/StudentNotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "parameters": {
+      "StudentId": {
+        "name": "studentId",
+        "in": "path",
+        "required": true,
+        "description": "MongoDB ObjectId of the student (24 hex characters). The value is not validated by middleware: anything that is not a well-formed ObjectId causes a Mongoose `CastError` and is reported as `500`.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{24}$",
+          "example": "66f1c2a4b3e5d7a9c0f1e2d3"
+        }
+      }
+    },
+    "schemas": {
+      "ObjectId": {
+        "type": "string",
+        "description": "MongoDB ObjectId serialized as a 24-character hex string.",
+        "pattern": "^[0-9a-fA-F]{24}$",
+        "example": "66f1c2a4b3e5d7a9c0f1e2d3"
+      },
+      "Gender": {
+        "type": "string",
+        "description": "Enum declared on the `gender` path of the Mongoose schema.",
+        "enum": ["male", "female", "other"]
+      },
+      "Student": {
+        "type": "object",
+        "description": "A persisted student document, as returned by Mongoose after `toJSON()`. Includes the `createdAt`/`updatedAt` fields added by the schema's `timestamps: true` option and the `__v` version key.",
+        "required": [
+          "_id",
+          "name",
+          "age",
+          "avgMark",
+          "gender",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "_id": {
+            "$ref": "#/components/schemas/ObjectId"
+          },
+          "name": {
+            "type": "string",
+            "description": "Student's full name. Required by the schema; no length or pattern constraints are declared.",
+            "example": "Alice"
+          },
+          "age": {
+            "type": "number",
+            "format": "double",
+            "description": "Age in years. Required by the schema; the path is declared as `Number` with no minimum or maximum.",
+            "example": 20
+          },
+          "onDuty": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether the student is currently on duty. Declared as `Boolean` with `default: false`, so documents created without the field get `false`.",
+            "example": false
+          },
+          "avgMark": {
+            "type": "number",
+            "format": "double",
+            "description": "Average mark. Required by the schema; the path is declared as `Number` with no range constraints.",
+            "example": 4.5
+          },
+          "gender": {
+            "$ref": "#/components/schemas/Gender"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Creation time, set by the schema's `timestamps: true` option.",
+            "example": "2026-09-30T12:00:00.000Z"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Last modification time, set by the schema's `timestamps: true` option.",
+            "example": "2026-09-30T12:00:00.000Z"
+          },
+          "__v": {
+            "type": "integer",
+            "description": "Mongoose version key, incremented on document saves.",
+            "example": 0
+          }
+        }
+      },
+      "StudentCreate": {
+        "type": "object",
+        "description": "Request body for `POST /students`, matching the writable paths of the Mongoose schema. Unknown properties are silently stripped (Mongoose `strict` mode) rather than rejected, so no `additionalProperties: false` is declared here.",
+        "required": ["name", "age", "avgMark", "gender"],
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Student's full name. Required.",
+            "example": "Alice"
+          },
+          "age": {
+            "type": "number",
+            "format": "double",
+            "description": "Age in years. Required.",
+            "example": 20
+          },
+          "onDuty": {
+            "type": "boolean",
+            "default": false,
+            "description": "Whether the student is on duty. Optional — the schema defaults it to `false`.",
+            "example": false
+          },
+          "avgMark": {
+            "type": "number",
+            "format": "double",
+            "description": "Average mark. Required.",
+            "example": 4.5
+          },
+          "gender": {
+            "$ref": "#/components/schemas/Gender"
+          }
+        }
+      },
+      "StudentUpdate": {
+        "type": "object",
+        "description": "Request body for `PATCH /students/{studentId}`. Nothing is required because the handler does not run update validators, so no path in the schema can fail validation on this route. Also accepts raw Mongoose update operators such as `$set`.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Alice"
+          },
+          "age": {
+            "type": "number",
+            "format": "double",
+            "example": 21
+          },
+          "onDuty": {
+            "type": "boolean",
+            "default": false,
+            "example": true
+          },
+          "avgMark": {
+            "type": "number",
+            "format": "double",
+            "example": 4.9
+          },
+          "gender": {
+            "$ref": "#/components/schemas/Gender"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "description": "Error body produced by `src/middleware/errorHandler.js` for `http-errors` instances and for unexpected failures.",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "string",
+            "description": "Error message. For `500` responses this is `error.stack` when `NODE_ENV` is not `production`, and `error.message` when it is.",
+            "example": "Student not found"
+          }
+        }
+      },
+      "RouteNotFound": {
+        "type": "object",
+        "description": "Body produced by `src/middleware/notFoundHandler.js` when no route matches. Note the key is `message`, not `error`.",
+        "required": ["message"],
+        "properties": {
+          "message": {
+            "type": "string",
+            "example": "Route not found"
+          }
+        }
+      }
+    },
+    "responses": {
+      "StudentNotFound": {
+        "description": "No student matches the given ObjectId. Thrown as `createHttpError(404, 'Student not found')` by the handler and shaped by `errorHandler`.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "Student not found"
+            }
+          }
+        }
+      },
+      "BadRequest": {
+        "description": "The request body could not be parsed as JSON. Raised by `express.json()`, whose error carries `status: 400` and is recognised by `isHttpError`.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": "Unexpected token o in JSON at position 1"
+            }
+          }
+        }
+      },
+      "RouteNotFoundResponse": {
+        "description": "The request matched no route and fell through to `notFoundHandler`.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/RouteNotFound"
+            },
+            "example": {
+              "message": "Route not found"
+            }
+          }
+        }
+      },
+      "ServerError": {
+        "description": "Unexpected server error. Covers Mongoose `ValidationError` and `CastError`, and database connectivity failures. In non-production environments the body contains the full stack trace.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            }
+          }
+        }
+      }
+    }
+  }
+}
