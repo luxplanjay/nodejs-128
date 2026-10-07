@@ -3,6 +3,7 @@ import cors from "cors";
 import helmet from "helmet";
 import { readFileSync } from "node:fs";
 import swaggerUi from "swagger-ui-express";
+import { errors } from "celebrate";
 import "dotenv/config";
 import { connectMongoDB } from "./db/connectMongoDB.js";
 import { notFoundHandler } from "./middleware/notFoundHandler.js";
@@ -25,6 +26,7 @@ app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 app.use(studentsRoutes);
 
 app.use(notFoundHandler);
+app.use(errors());
 app.use(errorHandler);
 
 await connectMongoDB();

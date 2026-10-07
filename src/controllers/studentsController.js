@@ -2,6 +2,7 @@ import createHttpError from "http-errors";
 import { Student } from "../models/student.js";
 
 export const getStudents = async (req, res) => {
+  console.log(req.query);
   const students = await Student.find();
   res.status(200).json(students);
 };
