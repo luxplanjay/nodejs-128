@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Building Web APIs with Node.js — Students API",
-    "description": "REST API for the `Building Web APIs with Node.js` course (BetterED Neoversity). Express 5 + MongoDB/Mongoose CRUD over a single `students` collection, mounted at the server root (no version prefix).\n\n**This build has no authentication and no request-validation middleware.** Requests are neither authenticated nor authorized, and request bodies are validated only by the Mongoose schema inside the driver, not by `celebrate`/`Joi`. See the per-operation descriptions for the error codes that actually result from this.\n\nUnmatched routes are handled by `notFoundHandler` and return `404 {\"message\": \"Route not found\"}`. Handler errors funnel through `errorHandler`: HTTP errors (`http-errors`) are returned with their own status, everything else becomes `500`. The `500` body is environment-dependent — `error.stack` outside production, `error.message` in production.",
+    "description": "REST API for the `Building Web APIs with Node.js` course (BetterED Neoversity). Express 5 + MongoDB/Mongoose CRUD over a single `students` collection, mounted at the server root (no version prefix).\n\n**This build has no authentication.** Requests are neither authenticated nor authorized. Every route is validated by `celebrate`/`Joi` middleware (`src/validations/studentsValidation.js`) before the handler runs; unknown keys are rejected. A failed validation returns `400` with the `ValidationError` body, produced by celebrate's `errors()` middleware.\n\nUnmatched routes are handled by `notFoundHandler` and return `404 {\"message\": \"Route not found\"}`. Handler errors funnel through `errorHandler`: HTTP errors (`http-errors`) are returned with their own status, everything else becomes `500`. The `500` body is environment-dependent — `error.stack` outside production, `error.message` in production.",
     "version": "1.0.0",
     "contact": {
       "name": "Alexander Repeta",
@@ -33,6 +33,31 @@
         "summary": "List students",
         "description": "Returns every student document in the collection. The handler issues a bare `Student.find()` — no filtering, sorting, field projection or pagination is applied, so the array length equals the full collection size.",
         "operationId": "getStudents",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "description": "Page number. Validated by Joi (`number().integer().min(1)`). **Currently ignored by the handler** — the full collection is always returned.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "example": 1
+            }
+          },
+          {
+            "name": "perPage",
+            "in": "query",
+            "required": false,
+            "description": "Page size. Validated by Joi (`number().min(10).max(50).integer()`). **Currently ignored by the handler** — the full collection is always returned.",
+            "schema": {
+              "type": "integer",
+              "minimum": 10,
+              "maximum": 50,
+              "example": 10
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "All students. Empty array when the collection is empty.",
@@ -80,6 +105,9 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
           "500": {
             "$ref": "#/components/responses/ServerError"
           }
@@ -88,7 +116,7 @@
       "post": {
         "tags": ["students"],
         "summary": "Create student",
-        "description": "Creates a new student from the request body via `Student.create(req.body)` and returns the persisted document.\n\nValidation is performed by the Mongoose schema in `src/models/student.js` (`name`, `age`, `avgMark` and `gender` are `required`; `gender` is restricted to the `male`/`female`/`other` enum; `onDuty` defaults to `false`). There is no `celebrate`/`Joi` middleware in this build.\n\nNote that a body which fails schema validation produces a **500**, not a 400: Mongoose throws a `ValidationError`, which is not an `http-errors` instance, so `errorHandler` treats it as an unexpected error. Unknown properties are silently stripped rather than rejected, because the schema runs in Mongoose `strict` mode.",
+        "description": "Creates a new student from the request body via `Student.create(req.body)` and returns the persisted document.\n\nThe body is first validated by `celebrate`/`Joi` (`createStudentSchema`): `name`, `age`, `avgMark` and `gender` are required, `gender` is restricted to the `male`/`female`/`other` enum, and `onDuty` is optional (the Mongoose schema defaults it to `false`). A body that fails validation, including one with unknown properties, is rejected with **400** before reaching the handler.",
         "operationId": "createStudent",
         "requestBody": {
           "required": true,
@@ -144,7 +172,7 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "$ref": "#/components/responses/ValidationError"
           },
           "500": {
             "$ref": "#/components/responses/ServerError"
@@ -161,7 +189,7 @@
       "get": {
         "tags": ["students"],
         "summary": "Get student by id",
-        "description": "Looks up a single student by its MongoDB ObjectId and returns the document, or `404` when no document matches.\n\n`studentId` is taken straight from `req.params` with no validation middleware, so a value that is not a valid 24-character hex ObjectId makes Mongoose throw a `CastError`, which surfaces as a `500`.",
+        "description": "Looks up a single student by its MongoDB ObjectId and returns the document, or `404` when no document matches.\n\n`studentId` is validated by `celebrate`/`Joi` (`studentIdParamSchema`), so a value that is not a valid ObjectId is rejected with `400` before the handler runs.",
         "operationId": "getStudentById",
         "responses": {
           "200": {
@@ -185,6 +213,9 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
           "404": {
             "$ref": "#/components/responses/StudentNotFound"
           },
@@ -196,7 +227,7 @@
       "patch": {
         "tags": ["students"],
         "summary": "Partially update student",
-        "description": "Applies the request body as an update document through `findOneAndUpdate({ _id: studentId }, req.body, { returnDocument: 'after' })` and returns the updated student, or `404` when no document matches.\n\nTwo behaviours follow from how the handler is written:\n\n- **Validators do not run on this route.** `runValidators` is not enabled, so the schema's `required` flags and the `gender` enum are *not* enforced here (unlike `POST /students`, which goes through `Student.create`). Every field below is therefore optional, and an out-of-enum `gender` will be stored as-is.\n- The body is handed to Mongoose untouched, so query-operator syntax such as `{ \"$set\": { \"name\": \"Alice\" } }` or `{ \"$unset\": { \"avgMark\": 1 } }` is passed through and will also work.",
+        "description": "Applies the request body as an update document through `findOneAndUpdate({ _id: studentId }, req.body, { returnDocument: 'after' })` and returns the updated student, or `404` when no document matches.\n\nThe path param and body are validated by `celebrate`/`Joi` (`updateStudentSchema`) first: every body field is optional, but at least one must be present, field constraints match `POST /students`, and unknown keys (including Mongoose operators such as `$set`) are rejected with `400`. A malformed `studentId` is also rejected with `400`.",
         "operationId": "updateStudent",
         "requestBody": {
           "required": true,
@@ -211,14 +242,6 @@
                   "value": {
                     "age": 21,
                     "avgMark": 4.9
-                  }
-                },
-                "withOperator": {
-                  "summary": "Mongoose update operator",
-                  "value": {
-                    "$set": {
-                      "onDuty": true
-                    }
                   }
                 }
               }
@@ -248,7 +271,7 @@
             }
           },
           "400": {
-            "$ref": "#/components/responses/BadRequest"
+            "$ref": "#/components/responses/ValidationError"
           },
           "404": {
             "$ref": "#/components/responses/StudentNotFound"
@@ -285,6 +308,9 @@
               }
             }
           },
+          "400": {
+            "$ref": "#/components/responses/ValidationError"
+          },
           "404": {
             "$ref": "#/components/responses/StudentNotFound"
           },
@@ -301,7 +327,7 @@
         "name": "studentId",
         "in": "path",
         "required": true,
-        "description": "MongoDB ObjectId of the student (24 hex characters). The value is not validated by middleware: anything that is not a well-formed ObjectId causes a Mongoose `CastError` and is reported as `500`.",
+        "description": "MongoDB ObjectId of the student (24 hex characters). Validated by Joi with a custom `isValidObjectId` check; an invalid value is rejected with `400` (message `Invalid id format`).",
         "schema": {
           "type": "string",
           "pattern": "^[0-9a-fA-F]{24}$",
@@ -384,17 +410,20 @@
       },
       "StudentCreate": {
         "type": "object",
-        "description": "Request body for `POST /students`, matching the writable paths of the Mongoose schema. Unknown properties are silently stripped (Mongoose `strict` mode) rather than rejected, so no `additionalProperties: false` is declared here.",
+        "description": "Request body for `POST /students`, validated by Joi (`createStudentSchema`). Unknown properties are rejected with `400`.",
         "required": ["name", "age", "avgMark", "gender"],
+        "additionalProperties": false,
         "properties": {
           "name": {
             "type": "string",
+            "minLength": 3,
+            "maxLength": 20,
             "description": "Student's full name. Required.",
             "example": "Alice"
           },
           "age": {
-            "type": "number",
-            "format": "double",
+            "type": "integer",
+            "minimum": 12,
             "description": "Age in years. Required.",
             "example": 20
           },
@@ -406,7 +435,8 @@
           },
           "avgMark": {
             "type": "number",
-            "format": "double",
+            "minimum": 2,
+            "maximum": 12,
             "description": "Average mark. Required.",
             "example": 4.5
           },
@@ -417,29 +447,79 @@
       },
       "StudentUpdate": {
         "type": "object",
-        "description": "Request body for `PATCH /students/{studentId}`. Nothing is required because the handler does not run update validators, so no path in the schema can fail validation on this route. Also accepts raw Mongoose update operators such as `$set`.",
+        "description": "Request body for `PATCH /students/{studentId}`, validated by Joi (`updateStudentSchema`). All fields are optional but at least one is required (`min(1)`). Unknown properties, including Mongoose operators such as `$set`, are rejected with `400`.",
+        "minProperties": 1,
+        "additionalProperties": false,
         "properties": {
           "name": {
             "type": "string",
+            "minLength": 3,
+            "maxLength": 20,
             "example": "Alice"
           },
           "age": {
-            "type": "number",
-            "format": "double",
+            "type": "integer",
+            "minimum": 12,
             "example": 21
           },
           "onDuty": {
             "type": "boolean",
-            "default": false,
             "example": true
           },
           "avgMark": {
             "type": "number",
-            "format": "double",
+            "minimum": 2,
+            "maximum": 12,
             "example": 4.9
           },
           "gender": {
             "$ref": "#/components/schemas/Gender"
+          }
+        }
+      },
+      "ValidationError": {
+        "type": "object",
+        "description": "Body produced by celebrate's `errors()` middleware when Joi validation fails. `validation` is keyed by the failed request segment (`body`, `query` or `params`).",
+        "required": ["statusCode", "error", "message", "validation"],
+        "properties": {
+          "statusCode": {
+            "type": "integer",
+            "example": 400
+          },
+          "error": {
+            "type": "string",
+            "example": "Bad Request"
+          },
+          "message": {
+            "type": "string",
+            "example": "Validation failed"
+          },
+          "validation": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "required": ["source", "keys", "message"],
+              "properties": {
+                "source": {
+                  "type": "string",
+                  "enum": ["body", "query", "params"]
+                },
+                "keys": {
+                  "type": "array",
+                  "items": { "type": "string" }
+                },
+                "message": {
+                  "type": "string"
+                }
+              }
+            },
+            "example": {
+              "body": {
+                "source": "body",
+                "keys": ["name"],
+                "message": "\"name\" length must be at least 3 characters long"
+              }
+            }
           }
         }
       },
@@ -494,6 +574,16 @@
           }
         }
       },
+      "ValidationError": {
+        "description": "Request failed `celebrate`/`Joi` validation (body, query or path params). Returned by celebrate's `errors()` middleware.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ValidationError"
+            }
+          }
+        }
+      },
       "RouteNotFoundResponse": {
         "description": "The request matched no route and fell through to `notFoundHandler`.",
         "content": {
@@ -508,7 +598,7 @@
         }
       },
       "ServerError": {
-        "description": "Unexpected server error. Covers Mongoose `ValidationError` and `CastError`, and database connectivity failures. In non-production environments the body contains the full stack trace.",
+        "description": "Unexpected server error, e.g. database connectivity failures. In non-production environments the body contains the full stack trace.",
         "content": {
           "application/json": {
             "schema": {
