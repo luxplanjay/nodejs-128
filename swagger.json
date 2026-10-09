@@ -31,17 +31,18 @@
       "get": {
         "tags": ["students"],
         "summary": "List students",
-        "description": "Returns every student document in the collection. The handler issues a bare `Student.find()` — no filtering, sorting, field projection or pagination is applied, so the array length equals the full collection size.",
+        "description": "Returns a page of students. The handler builds a filter from the optional query params (`minAvgMark`, `gender`, `search`), sorts by `avgMark` ascending, applies `skip`/`limit` pagination and returns the page together with pagination metadata. Without any params it returns page 1 with 10 items.\n\nQuery params are validated by `celebrate`/`Joi` (`getAllStudentsSchema`); unknown keys are rejected with `400`.",
         "operationId": "getStudents",
         "parameters": [
           {
             "name": "page",
             "in": "query",
             "required": false,
-            "description": "Page number. Validated by Joi (`number().integer().min(1)`). **Currently ignored by the handler** — the full collection is always returned.",
+            "description": "Page number, 1-based. Validated by Joi (`number().integer().min(1)`). The handler defaults to `1` when omitted.",
             "schema": {
               "type": "integer",
               "minimum": 1,
+              "default": 1,
               "example": 1
             }
           },
@@ -49,57 +50,98 @@
             "name": "perPage",
             "in": "query",
             "required": false,
-            "description": "Page size. Validated by Joi (`number().min(10).max(50).integer()`). **Currently ignored by the handler** — the full collection is always returned.",
+            "description": "Page size. Validated by Joi (`number().min(5).max(20).integer()`). The handler defaults to `10` when omitted.",
             "schema": {
               "type": "integer",
-              "minimum": 10,
-              "maximum": 50,
+              "minimum": 5,
+              "maximum": 20,
+              "default": 10,
               "example": 10
+            }
+          },
+          {
+            "name": "minAvgMark",
+            "in": "query",
+            "required": false,
+            "description": "Only return students with `avgMark` greater than or equal to this value. Validated by Joi (`number().positive()`).",
+            "schema": {
+              "type": "number",
+              "exclusiveMinimum": true,
+              "minimum": 0,
+              "example": 4
+            }
+          },
+          {
+            "name": "gender",
+            "in": "query",
+            "required": false,
+            "description": "Only return students of this gender. Validated by Joi (`valid('male', 'female', 'other')`).",
+            "schema": {
+              "$ref": "#/components/schemas/Gender"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "description": "Case-insensitive substring match on `name`. The value is trimmed by Joi and regex-escaped by the handler. An empty string is allowed and matches every student.",
+            "schema": {
+              "type": "string",
+              "example": "ali"
             }
           }
         ],
         "responses": {
           "200": {
-            "description": "All students. Empty array when the collection is empty.",
+            "description": "A page of students sorted by `avgMark` ascending. `students` is an empty array when nothing matches or the page is past the end.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Student"
-                  }
+                  "$ref": "#/components/schemas/StudentsPage"
                 },
                 "examples": {
                   "twoStudents": {
-                    "summary": "Two students",
-                    "value": [
-                      {
-                        "_id": "66f1c2a4b3e5d7a9c0f1e2d3",
-                        "name": "Alice",
-                        "age": 20,
-                        "onDuty": false,
-                        "avgMark": 4.5,
-                        "gender": "female",
-                        "createdAt": "2026-09-30T12:00:00.000Z",
-                        "updatedAt": "2026-09-30T12:00:00.000Z",
-                        "__v": 0
-                      },
-                      {
-                        "_id": "66f1c2a4b3e5d7a9c0f1e2d4",
-                        "name": "Bob",
-                        "age": 22,
-                        "onDuty": true,
-                        "avgMark": 3.2,
-                        "gender": "male",
-                        "createdAt": "2026-09-30T12:05:00.000Z",
-                        "updatedAt": "2026-09-30T12:30:00.000Z",
-                        "__v": 0
-                      }
-                    ]
+                    "summary": "Two students on page 1",
+                    "value": {
+                      "students": [
+                        {
+                          "_id": "66f1c2a4b3e5d7a9c0f1e2d4",
+                          "name": "Bob",
+                          "age": 22,
+                          "onDuty": true,
+                          "avgMark": 3.2,
+                          "gender": "male",
+                          "createdAt": "2026-09-30T12:05:00.000Z",
+                          "updatedAt": "2026-09-30T12:30:00.000Z",
+                          "__v": 0
+                        },
+                        {
+                          "_id": "66f1c2a4b3e5d7a9c0f1e2d3",
+                          "name": "Alice",
+                          "age": 20,
+                          "onDuty": false,
+                          "avgMark": 4.5,
+                          "gender": "female",
+                          "createdAt": "2026-09-30T12:00:00.000Z",
+                          "updatedAt": "2026-09-30T12:00:00.000Z",
+                          "__v": 0
+                        }
+                      ],
+                      "page": 1,
+                      "perPage": 10,
+                      "totalItems": 2,
+                      "totalPages": 1
+                    }
                   },
                   "noStudents": {
-                    "summary": "Empty collection",
-                    "value": []
+                    "summary": "No matches",
+                    "value": {
+                      "students": [],
+                      "page": 1,
+                      "perPage": 10,
+                      "totalItems": 0,
+                      "totalPages": 0
+                    }
                   }
                 }
               }
@@ -506,7 +548,9 @@
                 },
                 "keys": {
                   "type": "array",
-                  "items": { "type": "string" }
+                  "items": {
+                    "type": "string"
+                  }
                 },
                 "message": {
                   "type": "string"
@@ -543,6 +587,42 @@
           "message": {
             "type": "string",
             "example": "Route not found"
+          }
+        }
+      },
+      "StudentsPage": {
+        "type": "object",
+        "description": "Paginated result of `GET /students`.",
+        "required": ["students", "page", "perPage", "totalItems", "totalPages"],
+        "properties": {
+          "students": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Student"
+            }
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Current page number.",
+            "example": 1
+          },
+          "perPage": {
+            "type": "integer",
+            "description": "Page size used for this response.",
+            "example": 10
+          },
+          "totalItems": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Number of students matching the filter across all pages.",
+            "example": 2
+          },
+          "totalPages": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "`ceil(totalItems / perPage)`.",
+            "example": 1
           }
         }
       }
