@@ -21,7 +21,10 @@ export const studentIdParamSchema = {
 export const getAllStudentsSchema = {
   [Segments.QUERY]: Joi.object({
     page: Joi.number().integer().min(1),
-    perPage: Joi.number().min(10).max(50).integer(),
+    perPage: Joi.number().min(5).max(20).integer(),
+    minAvgMark: Joi.number().positive(),
+    gender: Joi.string().valid("male", "female", "other"),
+    search: Joi.string().trim().allow(""),
   }),
 };
 
