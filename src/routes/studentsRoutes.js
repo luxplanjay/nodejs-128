@@ -13,8 +13,11 @@ import {
   studentIdParamSchema,
   updateStudentSchema,
 } from "../validations/studentsValidation.js";
+import { authenticate } from "../middleware/authenticate.js";
 
 const router = Router();
+
+router.use("/students", authenticate);
 
 router.get("/students", celebrate(getAllStudentsSchema), getStudents);
 

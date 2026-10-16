@@ -57,3 +57,37 @@ export const logoutUser = async (req, res) => {
 
   res.status(204).send();
 };
+
+export const refreshSession = async (req, res) => {
+  const { sessionId, refreshToken } = req.cookies;
+
+  if (!sessionId || !refreshToken) {
+    throw createHttpError(401, "Bad credentials");
+  }
+
+  const session = await Session.findOne({
+    _id: sessionId,
+    refreshToken,
+  });
+
+  if (!session) {
+    throw createHttpError(401, "Session not found");
+  }
+
+  const isRefreshTokenExpired = session.refreshTokenValidUntil < new Date();
+
+  if (isRefreshTokenExpired) {
+    await session.deleteOne();
+    res.clearCookie("sessionId");
+    res.clearCookie("accessToken");
+    res.clearCookie("refreshToken");
+    throw createHttpError(401, "Session expired");
+  }
+
+  // Оновлювати сесію!!!
+  await session.deleteOne();
+  const newSession = await createSession(session.userId);
+  setSessionCookies(res, newSession);
+
+  res.status(200).json({ message: "Session refreshed!" });
+};

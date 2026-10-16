@@ -23,6 +23,11 @@ const studentSchema = new Schema(
       enum: ["male", "female", "other"],
       required: true,
     },
+    userId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+    },
   },
   { timestamps: true },
 );
