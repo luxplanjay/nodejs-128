@@ -11,6 +11,7 @@ import { notFoundHandler } from "./middleware/notFoundHandler.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import studentsRoutes from "./routes/studentsRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
+import userRoutes from "./routes/userRoutes.js";
 
 const swaggerDocument = JSON.parse(
   readFileSync(new URL("../swagger.json", import.meta.url), "utf8"),
@@ -28,6 +29,7 @@ app.use(cookieParser());
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 app.use(authRoutes);
+app.use(userRoutes);
 app.use(studentsRoutes);
 
 app.use(notFoundHandler);
